@@ -26,10 +26,3 @@ class AtariDuelDQN(Qvalue):
         """
         TODO week 2
         """
-
-    def action(self, x, epsilon) -> int:
-        if random.random() < epsilon:
-            act = random.randint(0, self.action_number - 1)
-        else:
-            act = self.forward(x).argmax().item()
-        return act

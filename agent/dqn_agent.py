@@ -16,10 +16,12 @@ import matplotlib.pyplot as plt
 from common.plot import Plots
 from common.common import plot_learning_curve as plot
 from utils.replay.replayer_interface import ReplayInterface
+from utils.replay.replay_format import get_replay
 from function_approximator.q_interface import Qvalue
 
+import os
 from IPython.display import clear_output
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict
 
 class DqnAgent:
     def __init__(self, 
@@ -38,7 +40,7 @@ class DqnAgent:
                         GPU_NUM
                         device
                         
-                        frame_num
+                        episode_num
                         learning_rate
                         discount_factor
                         update_duration
@@ -56,6 +58,12 @@ class DqnAgent:
         self.optimizer = torch.optim.Adam(self.curr_q_val.parameters(), lr = self.args["learning_rate"])
         self.save_path = args["model_path"] + args["model_name"] + ".pt"
 
+        # for training
+        self.start_episode = 0
+        self.frame_num = 0
+        self.loss_list=[]
+        self.reward_sum_list=[] + ".pt"
+
     
     # copy parameter of curr_q_val to target_q_val
     def copy_model_parameter(self):
@@ -66,56 +74,66 @@ class DqnAgent:
         state = torch.from_numpy(state).unsqueeze(0).type(torch.FloatTensor).to(self.args["device"])
         return self.curr_q_val.action(state, eps)
     
-    def get_replay(self, batch: int) -> Tuple:
-        """
-        TODO week 1: get observation, action, and reward from replay buffer
-                    ( + get the fact that this action was last action of episode)
-        """
-    
     def compute_loss(self):
         """
         TODO week 1: get replay with self.get_replay(batch) method and compute loss
         """
 
     def training(self, verbose: bool = True):
-
-        loss_list = []
-        reward_sum_list = []
-        reward_sum = 0
-
+        self.load_model()
         observation = self.env.reset()
-        for i in range(self.args["frame_num"]):
-            if i % self.args["update_duration"] == 0:
-                self.copy_model_parameter()
+        
+        for episode in range(self.start_episode, self.args["episode_num"]):
+            reward_sum = 0
+            done = False    # get 'done' variable from env.step()
+            while not done:
+                if self.frame_num % self.args["update_duration"] == 0:
+                    self.copy_model_parameter()
 
-            """
-            TODO week 1: implement get action with epsilon-greedy behaviour policy
-                         and push it  to replay buffer
-            """
-            
+                """
+                TODO week 1: implement get action with epsilon-greedy behaviour policy
+                            and push it  to replay buffer
+                """
+                
+                """
+                TODO week 1: implement training code
+                """
+
             # reset environment
-            if done:
-                reward_sum_list.append(reward_sum)
-                reward_sum = 0
-                observation = self.env.reset()
-            
-            
-           """
-           TODO week 1: implement training code
-           """
+            self.reward_sum_list.append(reward_sum)
+            observation = self.env.reset()
 
-            if  verbose and (i+1) % 10000 == 0:
-                clear_output(wait=True)
-                learning_curve = Plots(fig=plt.figure(figsize=(12, 6)), subplot_num=2, position=(1, 2), suptitle="Learning Curve")
-                plot(learning_curve, reward_sum_list, loss_list)
+            if (episode+1) % 10 == 0:
+                if  verbose:
+                    clear_output(wait=True)
+                    learning_curve = Plots(fig=plt.figure(figsize=(12, 6)), subplot_num=2, position=(1, 2), suptitle="Learning Curve")
+                    plot(learning_curve, self.reward_sum_list, self.loss_list)
                 
                 torch.save({
-                    'iteration': i,
-                    'model_state_dict': self.curr_q_val.state_dict(),
+                    'episode': episode,
+                    'frame_num': self.frame_num,
+                    'current_model_state_dict': self.curr_q_val.state_dict(),
+                    'target_model_state_dict': self.target_q_val.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
-                    'loss': loss_list,
-                    'reward': reward_sum_list
-                    }, self.save_path)
+                    'loss': self.loss_list,
+                    'reward': self.reward_sum_list
+                  }, self.save_path)
+        
+        if verbose:
+            clear_output(wait=True)
+            learning_curve = Plots(fig=plt.figure(figsize=(12, 6)), subplot_num=2, position=(1, 2), suptitle="Learning Curve")
+            plot(learning_curve, self.reward_sum_list, self.loss_list)
+    
+    def load_model(self):
+        if not os.path.isfile(self.save_path): return
+        checkpoint = torch.load(self.save_path)
+        self.start_episode = checkpoint["episode"] + 1
+        self.frame_num = checkpoint["frame_num"]
+        self.curr_q_val.load_state_dict(checkpoint["current_model_state_dict"])
+        self.target_q_val.load_state_dict(checkpoint["target_model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.loss_list = checkpoint["loss"]
+        self.reward_sum_list = checkpoint["reward"]
     
     def get_action(self, obs):
         return self.curr_q_val.action(obs, 0)
