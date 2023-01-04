@@ -40,9 +40,12 @@ class DqnAgent:
                         GPU_NUM
                         device
                         
-                        episode_num
+                        batch_size
                         learning_rate
                         discount_factor
+
+                        replay_initial
+                        episode_num
                         update_duration
         '''
 
@@ -126,7 +129,7 @@ class DqnAgent:
     
     def load_model(self):
         if not os.path.isfile(self.save_path): return
-        checkpoint = torch.load(self.save_path)
+        checkpoint = torch.load(self.save_path,  map_location=self.args["device"])
         self.start_episode = checkpoint["episode"] + 1
         self.frame_num = checkpoint["frame_num"]
         self.curr_q_val.load_state_dict(checkpoint["current_model_state_dict"])
